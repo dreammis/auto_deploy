@@ -1,0 +1,51 @@
+---
+- name: make sure exists
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: yjyx
+    group: yjyx
+    mode: 0755
+  with_items:
+    - /home/yjyx
+    - /home/yjyx/log
+
+- name: copy tar file
+  unarchive:
+    src:  /tmp/yjyx.tar.gz
+    dest: /home/yjyx/
+    owner: yjyx
+    group: yjyx
+
+- name: yijiao_src
+  shell: rm -rf yijiao_src && mv yijiao_build yijiao_src
+  args:
+    chdir: /home/yjyx/
+
+
+- name: celery to qa
+  shell: sed -i 's/RedisInfo\["host"\]/"118.178.129.156"/g' celery_common_cfg.py
+  args:
+    chdir: /home/yjyx/yijiao_src/yijiao_main/project/celerytasks/
+
+- name: delete celeryworker_paperanalyzer ;;;
+  shell: sed -i 's/;;;//g' yjyx.conf
+  args:
+    chdir: /home/yjyx/yijiao_src/yijiao_main/project/supervisord_conf/
+
+- name: django settings
+  template:
+    src: "{{ yjyx_templates_path }}/settings.py"
+    dest: /home/yjyx/yijiao_src/yijiao_main/project/settings.py
+
+- name: supervisorctl reread
+  shell: /usr/bin/supervisorctl --username "{{ supervisor_user }}" --password "{{ supervisor_password }}" --interactive reread
+  ignore_errors: true
+
+- name: supervisorctl update
+  shell: /usr/bin/supervisorctl --username "{{ supervisor_user }}" --password "{{ supervisor_password }}" --interactive update
+  ignore_errors: true
+
+- name: supervisorctl restart celeryworker_paperanalyzer
+  shell: /usr/bin/supervisorctl --username "{{ supervisor_user }}" --password "{{ supervisor_password }}" --interactive restart celeryworker_paperanalyzer:*
+  ignore_errors: true

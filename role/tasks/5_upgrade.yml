@@ -1,0 +1,145 @@
+---
+- name: rm project file
+  file:
+    path: "{{ item }}"
+    state: absent
+  delegate_to: localhost
+  with_items:
+    - /tmp/yijiao_backend
+    - /tmp/yijiao_web2
+    - /tmp/yijiao_build
+
+- name: make sure exists
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+  delegate_to: localhost
+  with_items:
+    - /tmp/yijiao_build
+
+- name: git clone backend
+  git:
+    repo: http://{{  git_user }}:{{ git_password }}@192.168.1.85/yijiao_backend
+    dest: /tmp/yijiao_backend
+    version: "{{ backend }}"
+  delegate_to: localhost
+
+- name: git clone web1
+  git:
+    repo: http://{{  git_user }}:{{ git_password }}@192.168.1.85/yijiao_web
+    dest: /tmp/yijiao_backend/yijiao_main/static
+    version: "{{ web_old }}"
+  delegate_to: localhost
+
+- name: git clone web2
+  git:
+    repo: http://{{  git_user }}:{{ git_password }}@192.168.1.85/yjyx_web
+    dest: /tmp/yijiao_web2
+    version: "{{ web_new }}"
+  delegate_to: localhost
+
+- name: build web2
+  shell: cnpm i && npm run build:dll && npm run qa
+  args:
+    chdir: /tmp/yijiao_web2
+  delegate_to: localhost
+
+- name: rsync file
+  shell: rsync -avz {{ item.src }} {{ item.dest }}
+  with_items:
+    - src: /tmp/yijiao_backend/pylib
+      dest: /tmp/yijiao_build/
+    - src: /tmp/yijiao_backend/yijiao_main
+      dest: /tmp/yijiao_build/
+    - src: /tmp/yijiao_backend/yijiao_main/static
+      dest: /tmp/yijiao_build/yijiao_main/static.dev
+    - src: /tmp/yijiao_backend/yijiao_main/static/gulp/gulpfile.js
+      dest: /tmp/yijiao_build/yijiao_main/gulpfile.js
+    - src: /tmp/yijiao_backend/yijiao_main/static/gulp/package.json
+      dest: /tmp/yijiao_build/yijiao_main/package.json
+  delegate_to: localhost
+
+- name: gulp package
+  shell: npm install && gulp && rm -rf static.dev && rm -rf node_modules
+  args:
+    chdir: /tmp/yijiao_build/yijiao_main/
+  delegate_to: localhost
+
+- name: set setting file
+  shell: rm -f settings.js && rm -f settings_production.js && mv settings_qa.js settings.js
+  args:
+    chdir: /tmp/yijiao_build/yijiao_main/static/common/
+  delegate_to: localhost
+
+- name: set supervisor file
+  shell: mv yjyx.conf_qa yjyx.conf
+  args:
+    chdir: /tmp/yijiao_build/yijiao_main/project/supervisord_conf/
+  delegate_to: localhost
+
+- name: rsync resource
+  shell: rsync /tmp/yijiao_web2/dist/resource /tmp/yijiao_build/yijiao_main/static/ -avz
+  delegate_to: localhost
+
+- name: rsync dll
+  shell: rsync /tmp/yijiao_web2/dist/dll /tmp/yijiao_build/yijiao_main/static/ -avz
+  delegate_to: localhost
+
+- name: replace
+  shell: sed -i 's/\/yjyx_cdn/https:\/\/cdn-ali-static-qa.zgyjyx.net\/yjyx_cdn/g' `grep "/yjyx_cdn" -rl --include='*.htm' --include='*.html' --include='*.js' --include='*.css' ./`
+  args:
+    chdir: /tmp/yijiao_build/yijiao_main/static/
+  delegate_to: localhost
+
+- name: replace editor
+  shell: sed -i 's/\/yjyx_cdn/https:\/\/cdn-ali-static-qa.zgyjyx.net\/yjyx_cdn/g' `grep "/yjyx_cdn" -rl --include='*editor' ./`
+  args:
+    chdir: /tmp/yijiao_build/yijiao_main/static/yjyx_cdn/jslib/formula/eq
+  delegate_to: localhost
+
+- name: tar code
+  shell: tar -czf yjyx.tar.gz yijiao_build --exclude=.git --exclude=*.pyc --exclude=*.log --exclude=migrations
+  args:
+    chdir: /tmp/
+  delegate_to: localhost
+
+- name: copy tar file
+  template:
+    src: "{{ yjyx_templates_path }}/deploy_qa.sh"
+    dest: /home/yjyx/
+    owner: "{{ yjyx_user }}"
+    group: "{{ yjyx_group }}"
+
+- name: copy tar file
+  unarchive:
+    src:  /tmp/yjyx.tar.gz
+    dest: /home/yjyx/
+    owner: "{{ yjyx_user }}"
+    group: "{{ yjyx_group }}"
+
+- name: deploy_qa
+  shell: sh deploy_qa.sh && rm -rf /home/yjyx/yijiao_build
+  args:
+    chdir: /home/yjyx/
+
+- name: supervisorctl reread
+  shell: /usr/local/bin/supervisorctl --username "{{ supervisor_user }}" --password "{{ supervisor_password }}" --interactive reread
+  ignore_errors: true
+
+- name: supervisorctl update
+  shell: /usr/local/bin/supervisorctl --username "{{ supervisor_user }}" --password "{{ supervisor_password }}" --interactive update
+  ignore_errors: true
+
+- name: supervisorctl restart all
+  shell: /usr/local/bin/supervisorctl --username "{{ supervisor_user }}" --password "{{ supervisor_password }}" --interactive restart all
+  ignore_errors: true
+
+- name: run cdn_sync_qa.sh versui 2.1.2
+  shell: /usr/local/bin/aliyuncli oss UploadObjectFromLocalDir /tmp/yijiao_build/yijiao_main/static/yjyx_cdn/ oss://yjyx-web-static-qa/yjyx_cdn --check_point /tmp/checkpoint_qa.txt --replace true --check_md5 true --thread_num 20
+  delegate_to: localhost
+  ignore_errors: true
+
+- name: last
+  shell: echo ok
+  delegate_to: localhost

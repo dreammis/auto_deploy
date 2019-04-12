@@ -1,0 +1,108 @@
+---
+- name: make sure exists
+  file:
+    path: "{{ item }}"
+    state: directory
+  with_items:
+    - /etc/yum.repos.d/repo.bac
+    - /root/.pip
+
+- name: backup repo
+  shell: /usr/bin/mv CentOS* repo.bac/
+  args:
+    chdir: /etc/yum.repos.d/
+  ignore_errors: true
+
+- name: update aliyun repo
+  template:
+    src: "{{ yjyx_templates_path }}/CentOS-local.repo"
+    dest: /etc/yum.repos.d/CentOS-local.repo
+
+- name: resolv.conf
+  template:
+    src: "{{ yjyx_templates_path }}/resolv.conf"
+    dest: /etc/resolv.conf
+
+- name: pip.conf
+  template:
+    src: "{{ yjyx_templates_path }}/pip.conf"
+    dest: /root/.pip/pip.conf
+
+- yum:
+    name: "{{ item }}"
+    state: removed
+  with_items:
+    - MySQL-server
+    - MySQL-client
+    - MySQL-devel
+
+- name: yum install base lib
+  yum:
+    name: "{{ item }}"
+  with_items:
+    - psmisc
+    - chrony
+    - gcc
+    - gcc-c++
+    - git
+    - make
+    - unzip
+    - openssl
+    - mariadb-devel
+    - libmemcached-devel
+    - zlib-devel
+    - pcre-devel
+    - openssl-devel
+    - python-devel
+    - libffi-devel
+
+    - zbar
+    - cmake
+    - libstdc++
+    - autoconf
+    - automake
+    - libtool
+    - autoconf-archive
+    - libjpeg-devel
+    - libpng-devel
+    - libtiff-devel
+
+- name: restart chrony
+  service:
+    name: chronyd
+    state: restarted
+    enabled: yes
+
+- name: yum groupinstall dev tool
+  yum:
+    name: "@Development tools"
+
+- name: install python36
+  shell: "{{ item }}"
+  with_items:
+    - /usr/bin/sed -i '1s/python.*/python2/g' /usr/bin/yum
+    - /usr/bin/sed -i '1s/python.*/python2/g' /bin/yum
+    - /usr/bin/sed -i '1s/python.*/python2/g' /usr/libexec/urlgrabber-ext-down
+    - /usr/bin/yum install python36 python36-devel -y
+    - /usr/bin/ln -sf /usr/bin/python36 /usr/bin/python
+
+- name: post requirements.txt
+  template:
+    src: "{{ yjyx_templates_path }}/requirements.txt"
+    dest: /tmp/requirements.txt
+
+- unarchive:
+    src: "{{ yjyx_files_path }}/service/supervisor-master.zip"
+    dest: /tmp/
+
+- name: python install pip
+  shell: "{{ item }}"
+  with_items:
+    - /usr/bin/curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+    - /usr/bin/python get-pip.py
+    - /usr/bin/python2 get-pip.py
+    - /usr/local/bin/pip3 install -r /tmp/requirements.txt
+    - /usr/bin/pip2 install MySQL-python
+    - python setup.py install
+  args:
+    chdir: /tmp/supervisor-master/

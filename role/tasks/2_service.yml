@@ -1,0 +1,142 @@
+---
+- name: make sure exists
+  file:
+    path: "{{ item }}"
+    state: directory
+  with_items:
+    - /var/www/html/file
+
+
+- name: install rabbitmq
+  block:
+    - copy:
+        src: "{{ yjyx_files_path }}/service/rabbitmq-server-3.6.0-1.noarch.rpm"
+        dest: /tmp/
+
+    - yum:
+        name: /tmp/rabbitmq-server-3.6.0-1.noarch.rpm
+
+    - service:
+        name: rabbitmq-server
+        state: restarted
+        enabled: yes
+
+    - rabbitmq_plugin:
+        names: rabbitmq_management
+        state: enabled
+
+    - rabbitmq_user:
+        user: "{{ mq_user }}"
+        password: "{{ mq_passwd }}"
+        tags: administrator
+        state: present
+
+    - rabbitmq_vhost:
+        name: "{{ mq_vhost }}"
+
+
+- name: install nosql
+  block:
+
+    - template:
+        src: "{{ yjyx_templates_path }}/mongod.conf"
+        dest: /etc/mongod.cnf
+
+    - yum:
+        name: "{{ item }}"
+      with_items:
+        - memcached
+        - redis
+        - mongodb-org-3.6.4
+        - mongodb-org-server-3.6.4
+        - mongodb-org-shell-3.6.4
+        - mongodb-org-mongos-3.6.4
+        - mongodb-org-tools-3.6.4
+
+    - service:
+        name: "{{ item }}"
+        state: restarted
+        enabled: yes
+      with_items:
+        - memcached
+        - redis
+
+
+- name: install nginx
+  block:
+    - unarchive:
+        src: "{{ yjyx_files_path }}/service/nginx-1.8.1.tar.gz"
+        dest: /tmp/
+
+    - shell: "{{ item }}"
+      args:
+        chdir: /tmp/nginx-1.8.1/
+      with_items:
+        - ./configure --prefix=/usr/local/nginx --with-http_ssl_module
+        - make
+        - make install
+
+    - template:
+        src: "{{ yjyx_templates_path }}/service_nginx/{{ item.src}}"
+        dest: "{{ item.dest }}"
+      with_items:
+        - src: tmp-121866.com.cert
+          dest: /var/www/html/file/tmp-121866.com.cert
+        - src: tmp-121866.com.key
+          dest: /var/www/html/file/tmp-121866.com.key
+        - src: nginx.conf
+          dest: /usr/local/nginx/conf/nginx.conf
+
+
+- name: install mysql
+  block:
+    - copy:
+        src: "{{ yjyx_files_path }}/service/{{ item.src }}"
+        dest: /tmp/
+      with_items:
+        - src: MySQL-server-5.6.38-1.el7.x86_64.rpm
+        - src: MySQL-client-5.6.38-1.el7.x86_64.rpm
+        - src: MySQL-devel-5.6.38-1.el7.x86_64.rpm
+
+    - copy:
+        src: "{{ yjyx_files_path }}/service/libmysqlclient.so.18"
+        dest: /usr/lib64/libmysqlclient.so.18
+
+    - yum:
+        name: mariadb-libs
+        state: removed
+
+    - yum:
+        name: "{{ item }}"
+      with_items:
+        - /tmp/MySQL-server-5.6.38-1.el7.x86_64.rpm
+        - /tmp/MySQL-client-5.6.38-1.el7.x86_64.rpm
+        - /tmp/MySQL-devel-5.6.38-1.el7.x86_64.rpm
+
+    - template:
+        src: "{{ yjyx_templates_path }}/service_mysql/my.cnf"
+        dest: /etc/my.cnf
+
+    - template:
+        src: "{{ yjyx_templates_path }}/service_mysql/.my.cnf"
+        dest: /root/.my.cnf
+
+    - service:
+        name: mysql
+        state: restarted
+        enabled: yes
+
+    - command: awk '/#/ {print $NF}' /root/.mysql_secret
+      register: mysql_root_password_init
+
+    - command: mysqladmin -uroot -p{{ mysql_root_password_init.stdout }} password "{{ mysql_root_password }}"
+      ignore_errors: true
+
+    - mysql_user:
+        name: "{{ mysql_yjyx_user }}"
+        password: "{{ mysql_yjyx_password }}"
+        host: "{{ item }}"
+        priv: "*.*:ALL"
+      with_items:
+        - "%"
+        - localhost

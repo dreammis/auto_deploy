@@ -1,0 +1,21 @@
+---
+- name: get backend branch
+  shell: /usr/bin/git ls-remote -h http://{{  git_user }}:{{ git_password }}@192.168.1.85/yijiao_backend | awk -F '/' '{print $3}'
+  args:
+    chdir: /tmp
+  delegate_to: localhost
+  register: backend
+
+- name: get web_old branch
+  shell: /usr/bin/git ls-remote -h http://{{  git_user }}:{{ git_password }}@192.168.1.85/yijiao_web | awk -F '/' '{print $3}'
+  args:
+    chdir: /tmp
+  delegate_to: localhost
+  register: web_old
+
+- name: get web_new branch
+  shell: /usr/bin/git ls-remote -h http://{{  git_user }}:{{ git_password }}@192.168.1.85/yjyx_web | awk -F '/' '{print $3}'
+  args:
+    chdir: /tmp
+  delegate_to: localhost
+  register: web_new

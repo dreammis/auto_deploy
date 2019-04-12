@@ -1,0 +1,103 @@
+---
+- name: git clone backend
+  git:
+    repo: http://{{  git_user }}:{{ git_password }}@192.168.1.85/yijiao_backend
+    dest: /tmp/yijiao_src
+    version: dev3
+  delegate_to: localhost
+
+- name: git clone web_old
+  git:
+    repo: http://{{  git_user }}:{{ git_password }}@192.168.1.85/yijiao_web
+    dest: /tmp/yijiao_src/yijiao_main/static
+    version: dev
+  delegate_to: localhost
+
+- name: git clone web_new
+  git:
+    repo: http://{{  git_user }}:{{ git_password }}@192.168.1.85/yjyx_web
+    dest: /tmp/yijiao_src/yijiao_main/yjyx_web
+    version: dev
+  delegate_to: localhost
+
+- name: tar code
+  shell: tar -czf yjyx.tar.gz yijiao_src --exclude=.git --exclude=*.pyc --exclude=*.log --exclude=migrations
+  args:
+    chdir: /tmp/
+  delegate_to: localhost
+
+- name: create user
+  user:
+    name: "{{ yjyx_user }}"
+    password: "{{ yjyx_password }}"
+
+- name: unarchive code
+  unarchive:
+    src:  /tmp/yjyx.tar.gz
+    dest: /home/yjyx/
+    owner: "{{ yjyx_user }}"
+    group: "{{ yjyx_group }}"
+
+- name: rm project file
+  file:
+    path: "{{ item }}"
+    state: absent
+  delegate_to: localhost
+  with_items:
+    - /tmp/yijiao_src
+    - /tmp/yjyx.tar.gz
+
+- name: make sure exists
+  file:
+    path: "{{ item }}"
+    owner: "{{ yjyx_user }}"
+    group: "{{ yjyx_group }}"
+    state: directory
+    mode: 0755
+  with_items:
+    - /home/yjyx/log/
+    - /var/log/supervisord/
+
+- name: delete mysql db
+  mysql_db:
+    name: "{{ mysql_yjyx_database }}"
+    state: absent
+  ignore_errors: true
+
+- name: create mysql db
+  mysql_db:
+    name: "{{ mysql_yjyx_database }}"
+    encoding: utf8mb4
+    collation: utf8mb4_general_ci
+    state: present
+
+- name: django settings
+  template:
+    src: "{{ yjyx_templates_path }}/settings.py"
+    dest: /home/yjyx/yijiao_src/yijiao_main/project/settings.py
+
+- name: makemigrations
+  shell: ls -ld services/datamodel/*/ | sed  -n 's/.*\/\(.\+\)\/$/\1/p' | grep -v -e "__" | paste -d " " -s
+  args:
+    chdir: /home/yjyx/yijiao_src/yijiao_main/
+  register: _dir
+
+- name: makemigrations
+  shell: python manage.py makemigrations {{ _dir.stdout }}
+  args:
+    chdir: /home/yjyx/yijiao_src/yijiao_main/
+
+- name: migrate
+  shell: python manage.py migrate
+  args:
+    chdir: /home/yjyx/yijiao_src/yijiao_main/
+
+- name: start supervisor
+  shell: supervisord -c supervisord.conf && chown -R yjyx.yjyx /home/yjyx
+  args:
+    chdir: /home/yjyx/yijiao_src/yijiao_main/project/supervisord_conf/
+  ignore_errors: true
+
+- name: supervisorctl restart all
+  shell: supervisorctl --username "{{ supervisor_user }}" --password "{{ supervisor_password }}" --interactive restart all
+  ignore_errors: true

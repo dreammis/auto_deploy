@@ -1,0 +1,7 @@
+migrations/
+__pycache__/
+*.pyc
+.idea/
+nohup.out
+CentOS-7-x86_64-Minimal-1708.iso
+role/files/

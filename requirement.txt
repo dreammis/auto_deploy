@@ -1,0 +1,6 @@
+Django==2.0.3
+PyMySQL==0.8.0
+PyYAML==3.12
+ansible==2.5.0
+celery==4.2.0
+redis==2.10.6

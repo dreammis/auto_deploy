@@ -1,0 +1,42 @@
+name_server: 192.168.1.1
+
+nginx_user: yjyx
+nginx_static_path: /home/yjyx/yijiao_src/yijiao_main/static
+nginx_listen_port: 80
+
+project_host: 127.0.0.1
+project_port: 8080
+project_app: (api|student)
+project_address: 0.0.0.0
+
+mysql_log: /var/log/mysql.log
+mysql_pid: /run/mysql.pid
+mysql_datadir: /var/lib/mysql
+mysql_socket: /var/lib/mysql/mysql.sock
+
+mysql_root_user: root
+mysql_root_password: root
+
+mysql_yjyx_database: yjyx
+mysql_yjyx_user: dbadmin
+mysql_yjyx_password: yijiaoqaz
+mysql_yjyx_host: 118.178.129.156
+
+mq_url: localhost:15672
+mq_user: yjyx
+mq_passwd: yjyx
+mq_vhost: yjyx
+mq_queue: paperanalyzer
+
+celery_redis_passwd: yjyxqaredisyjyx
+celery_broker_url: redis://127.0.0.1:6379/0
+
+yjyx_user: yjyx
+yjyx_group: yjyx
+yjyx_password: yjyx
+
+git_user: taoxubing
+git_password: sdfsdf12
+
+supervisor_user: jcy
+supervisor_password: sdfsdf
